@@ -163,7 +163,7 @@
             background-color: #2d2d2d; /* Slightly lighter input bg */
             color: var(--text-color);
             border: 1px solid #555;
-            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease; /* Added opacity transition */
         }
         textarea {
             min-height: 140px; /* Taller textarea */
@@ -176,6 +176,13 @@
             box-shadow: 0 0 0 4px var(--primary-glow); /* Glow effect */
         }
         textarea::placeholder { color: #888; }
+        /* Style for textarea when loading */
+        textarea.textarea-loading {
+            opacity: 0.7;
+            cursor: default;
+            pointer-events: none; /* Prevent interaction */
+        }
+
 
         button {
             /* Enhanced Gradient Button */
@@ -189,6 +196,10 @@
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
             letter-spacing: 0.5px;
             text-transform: uppercase; /* Uppercase text */
+            display: flex; /* For icon alignment */
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
         button:hover:not(:disabled) {
              background: linear-gradient(120deg, var(--primary-color-darker), #0a7ac4);
@@ -206,6 +217,17 @@
              box-shadow: none;
              transform: none;
         }
+         /* Simple spinner for button */
+         .button-spinner {
+             width: 18px;
+             height: 18px;
+             border: 2px solid rgba(255, 255, 255, 0.3);
+             border-radius: 50%;
+             border-top-color: #fff;
+             animation: spin 0.8s linear infinite;
+             display: inline-block; /* Or adjust as needed */
+         }
+
 
         .score-section {
             display: flex;
@@ -336,7 +358,7 @@
 
 
         .loading {
-            display: none;
+            display: none; /* Hide by default */
             text-align: center;
             padding: 30px 0; /* More padding */
             color: var(--text-color-secondary);
@@ -344,6 +366,8 @@
             justify-content: center;
             gap: 15px;
             font-size: 1.15em;
+            margin-top: -20px; /* Pull up slightly to account for removed button margin */
+            margin-bottom: 20px; /* Add space below */
         }
         .spinner {
              /* Enhanced Spinner */
@@ -481,8 +505,11 @@
             <h1>X-Post Analyzer Pro ✨</h1>
             <div class="input-section">
                 <h2>Analyze Your Draft</h2>
-                <textarea id="post-content" rows="6" placeholder="Paste your X (Twitter) post text here... e.g., Exploring the future of AI ethics. It's complex, but crucial we get it right. What's one ethical challenge that concerns you most? #AI #Ethics #FutureTech"></textarea>
-                <button id="analyze-button">Analyze Post</button>
+                <textarea id="post-content" rows="6" placeholder="Paste your X (Twitter) post text here..."></textarea>
+                <button id="analyze-button">
+                    <span id="analyze-button-text">Analyze Post</span>
+                    <span id="analyze-button-spinner" style="display: none;" class="button-spinner"></span>
+                </button>
                 <div id="loading" class="loading">
                     <div class="spinner"></div>
                     <span>Deep Analyzing with AI...</span>
@@ -548,7 +575,7 @@
 
         <div class="right-panel">
             <div class="example-posts-section response-area" id="examples-area">
-                <h2>Example Optimized Posts</h2>
+                <h2>AI-Generated Examples</h2> <!-- Updated Title -->
                 <div id="example-posts-container">
                     <!-- Example posts will be loaded here -->
                     <p>Examples will appear here...</p>
@@ -563,8 +590,10 @@
     <script>
         // --- DOM Element References ---
         const analyzeButton = document.getElementById('analyze-button');
+        const analyzeButtonText = document.getElementById('analyze-button-text');
+        const analyzeButtonSpinner = document.getElementById('analyze-button-spinner');
         const postContentInput = document.getElementById('post-content');
-        const loadingDiv = document.getElementById('loading');
+        const loadingDiv = document.getElementById('loading'); // Keep the main spinner too
         const errorMessageContainer = document.getElementById('error-message-container');
 
         // Response Area Containers
@@ -593,20 +622,13 @@
         const analysisModel = "openrouter:openai/o3"; // Recommended model
         // const analysisModel = "openai/gpt-4o"; // Alternative
 
-        // --- Initial Content ---
-        // Use a default message that reflects the theme of the original images
-        const initialTweetContent = `Feeling a bit under the weather today. 🤒 Just one of those days you want to curl up and recharge. Anyone else relate? What's your go-to comfort activity?`;
-
         // --- Event Listener ---
         analyzeButton.addEventListener('click', handleAnalysisRequest);
 
         // --- Initial Setup ---
         document.addEventListener('DOMContentLoaded', () => {
-             postContentInput.value = initialTweetContent;
              clearPreviousResults();
-             if (!postContentInput.value) {
-                 postContentInput.placeholder = "Paste your X (Twitter) post text here...";
-             }
+             postContentInput.placeholder = "Paste your X (Twitter) post text here...";
          });
 
         // --- Main Analysis Function ---
@@ -619,10 +641,10 @@
             }
 
             clearPreviousResults();
-            showLoading(true);
+            setLoadingState(true); // Use new function for UI changes
 
             // ** Build the prompt **
-            const analysisPrompt = buildAnalysisPromptWithExamples(postContent);
+            const analysisPrompt = buildAnalysisPrompt(postContent); // Use updated prompt builder
             console.log("Sending prompt (first 200 chars):", analysisPrompt.substring(0, 200) + "...");
 
             try {
@@ -631,9 +653,8 @@
                 console.log("Received response text length:", responseText?.length);
 
                 if (!responseText || responseText.trim().length < 100) {
-                     // Try parsing even short responses, might just be missing examples
                      console.warn(`Received short response from AI (Length: ${responseText?.length}). Attempting to parse anyway.`);
-                     // throw new Error(`Received very short or empty response from AI (Length: ${responseText?.length}). Model might be unavailable or prompt/format issue.`);
+                     // Don't throw error for short response here, let parsing handle it
                 }
 
                 parseAndDisplayResponse(responseText); // This will now handle potential missing sections
@@ -646,20 +667,14 @@
                 errorMessageContainer.classList.add('visible');
                 errorMessageContainer.style.display = 'block';
             } finally {
-                showLoading(false);
+                setLoadingState(false); // Reset UI state
             }
         }
 
         // --- Helper Functions ---
 
-        function buildAnalysisPromptWithExamples(postContent) {
-            // ** NEW: Pre-defined "cool" examples related to the "under the weather" theme **
-            const examplePost1 = `Kinda dragging today, ngl. 🥱 Sometimes you just gotta call a timeout & hit reset. What's your non-negotiable recharge ritual when you're feeling drained? Spill the beans! 👇`;
-            const examplePost2 = `Running on low battery today 🔋 but powering through *gently*. Quick reminder: self-care isn't selfish, it's essential maintenance! What’s one tiny victory you’re aiming for today to lift your spirits? ✨`;
-            const examplePost3 = `Yeah, feeling under the weather is a definite mood killer. 🤒 But hey, it's okay to not be 100%. Give yourself permission to just *be* for a bit. The bounce-back is always stronger. 💪 What helps you ride out the low-energy waves?`;
-            const examplePost4 = `Anyone else feel like their internal 'check engine' light is blinking today? 😂 Definitely need a system reboot over here. Taking it easy & focusing on the small stuff. Drop your top quick mood boosters! Need some inspo. 🙏`;
-            const examplePost5 = `Definitely feeling a bit off-kilter today. Channeling major reset vibes. 🧘‍♀️ Sometimes you just gotta lean into the quiet & trust the process. Tomorrow's a fresh start. What’s one good thing (big or small) lighting up your day today? ☀️`;
-
+        // ** UPDATED Prompt Builder **
+        function buildAnalysisPrompt(postContent) {
             return `
 Act as a world-class X (formerly Twitter) algorithm strategist and viral content philosopher. Analyze the following post draft with extreme scrutiny. Focus on maximizing reach, genuine engagement (meaningful replies, saves, clicks), depth of thought, and positive algorithmic signals based on CURRENT best practices (as of mid-2024). Assume the algorithm prioritizes quality interaction, dwell time, and authentic conversation over simple metrics.
 
@@ -706,19 +721,10 @@ Provide your detailed analysis STRICTLY in the following format. Use the exact h
 - Dwell Time: ...
 - [...]
 
-### Example Optimized Posts:
-**[CRITICAL INSTRUCTION: You MUST provide exactly the FIVE (5) example posts below, formatted EXACTLY as shown. Each example MUST start on a brand new line with "Example N:" (where N is 1 to 5), followed immediately by the post content on the same line or the next line. DO NOT add any other text, introductions, explanations, or modifications to these specific five examples in this section.]**
+### AI-Generated Examples:
+[**Instruction:** Generate 3-5 NEW, optimized example posts inspired by the original draft and your analysis. Each example should aim for high engagement and algorithmic favor. Format each clearly, starting on a new line, perhaps using a simple bullet or numbered list, or just starting with "Example:".]
 
-Example 1: ${examplePost1}
-
-Example 2: ${examplePost2}
-
-Example 3: ${examplePost3}
-
-Example 4: ${examplePost4}
-
-Example 5: ${examplePost5}
-`;
+`; // Removed the hardcoded examples and changed the instruction
         }
 
 
@@ -756,34 +762,25 @@ Example 5: ${examplePost5}
 
 
         function parseAndDisplayResponse(responseString) {
-             // Handle potential null/undefined response early
+             // (Handle null/undefined/empty string - same as before)
              if (typeof responseString !== 'string') {
                  console.error("Invalid input to parseAndDisplayResponse: Expected a string, got", typeof responseString);
                  displayErrorMessage("Internal error: Received invalid data type from AI.");
-                 resetResultDisplay(); // Clear any previous results
-                 showResponseAreas(false, false); // Ensure areas are hidden
-                 errorMessageContainer.classList.add('visible'); // Show error container
-                 errorMessageContainer.style.display = 'block';
-                 return;
+                 resetResultDisplay(); showResponseAreas(false, false); errorMessageContainer.classList.add('visible'); errorMessageContainer.style.display = 'block'; return;
              }
-             // If string is empty or only whitespace
               if (responseString.trim() === '') {
                   console.warn("Received empty response string from AI. Displaying message.");
                   displayErrorMessage("The AI returned an empty response. This might be a temporary issue with the service.");
-                  resetResultDisplay(); // Clear any previous results
-                  showResponseAreas(false, false); // Ensure areas are hidden
-                  errorMessageContainer.classList.add('visible'); // Show error container
-                  errorMessageContainer.style.display = 'block';
-                  return;
+                  resetResultDisplay(); showResponseAreas(false, false); errorMessageContainer.classList.add('visible'); errorMessageContainer.style.display = 'block'; return;
               }
 
              const normalizedResponse = responseString.replace(/\r\n/g, '\n');
              const lines = normalizedResponse.split('\n');
              const sections = {};
-             let currentSection = null;
+             let currentSectionKey = null;
              let buffer = [];
 
-             // Define section keys based on the prompt structure
+             // Section keys MUST match the ### Headings in the prompt
              const sectionKeys = [
                  "Global Score",
                  "Engagement Score",
@@ -794,67 +791,51 @@ Example 5: ${examplePost5}
                  "Algorithm Optimization Opportunities",
                  "Algorithm Optimization Tips",
                  "Key Algorithm Factors (General)",
-                 "Example Optimized Posts" // Crucial: Case-sensitive match
+                 "AI-Generated Examples" // ** MATCHES NEW PROMPT HEADING **
              ];
-             let currentSectionKey = null; // Use the exact key from sectionKeys
 
              for (const line of lines) {
                  const trimmedLine = line.trim();
                  let foundHeading = false;
-
                  for (const key of sectionKeys) {
-                     // Match heading: ### Key Name : optional colon
-                     const headingRegex = new RegExp(`^###\\s+${key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*:?\\s*$`, 'i'); // Case-insensitive match
+                     const headingRegex = new RegExp(`^###\\s+${key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*:?\\s*$`, 'i');
                      if (headingRegex.test(trimmedLine)) {
-                         if (currentSectionKey && buffer.length > 0) {
-                             sections[currentSectionKey] = buffer.join('\n').trim();
-                         }
-                         currentSectionKey = key; // Store the exact key
-                         buffer = [];
-                         console.log(`Found section heading matching key: ${currentSectionKey}`);
-                         foundHeading = true;
-                         break; // Stop checking keys for this line
+                         if (currentSectionKey && buffer.length > 0) sections[currentSectionKey] = buffer.join('\n').trim();
+                         currentSectionKey = key; buffer = []; console.log(`Found section heading: ${currentSectionKey}`);
+                         foundHeading = true; break;
                      }
                  }
-
-                 if (!foundHeading && currentSectionKey) {
-                     buffer.push(line); // Preserve original line format if inside a section
-                 }
+                 if (!foundHeading && currentSectionKey) buffer.push(line);
              }
-             // Capture the last section
-             if (currentSectionKey && buffer.length > 0) {
-                 sections[currentSectionKey] = buffer.join('\n').trim();
-             }
+             if (currentSectionKey && buffer.length > 0) sections[currentSectionKey] = buffer.join('\n').trim();
 
              console.log("Parsed Section Keys found:", Object.keys(sections));
 
              // --- Update DOM (handle missing sections gracefully) ---
-             resetResultDisplay(); // Clear previous stuff first
+             resetResultDisplay();
 
              const parseScore = (sectionName) => {
                  const sectionContent = sections[sectionName];
-                 if (!sectionContent) {
-                      console.warn(`Score section "${sectionName}" not found in parsed data.`);
-                      return 0; // Default to 0 if missing
-                 }
-                 // Regex improved: handles potential surrounding text better, ensures digits
-                 const scoreMatch = sectionContent.match(/[^0-9]|^(\d{1,3})[^0-9%]|%/);
-                 const scoreStr = scoreMatch?.[1] || sectionContent.trim().match(/^(\d{1,3})$/)?.[1]; // Try matching if it's the only content
-                 if (scoreStr) {
-                     return parseInt(scoreStr, 10);
-                 } else {
-                     console.warn(`Could not parse score value from section "${sectionName}":`, sectionContent);
-                     return 0; // Default to 0 if parsing fails
-                 }
+                 if (!sectionContent) { console.warn(`Score section "${sectionName}" not found.`); return 0; }
+                 // Slightly improved regex to find score within potential text
+                 const scoreMatch = sectionContent.match(/(?:\s|^)(\d{1,3})(?:\s|%|$)/);
+                 if (scoreMatch && scoreMatch[1]) return parseInt(scoreMatch[1], 10);
+                 // Fallback: Check if the entire trimmed content is just the number
+                 const trimmedContent = sectionContent.trim();
+                 if (/^\d{1,3}$/.test(trimmedContent)) return parseInt(trimmedContent, 10);
+
+                 console.warn(`Could not parse score value from section "${sectionName}":`, sectionContent);
+                 return 0;
              };
+
 
              const gs = parseScore('Global Score');
              const es = parseScore('Engagement Score');
              const fs = parseScore('Friendliness Score');
              const vs = parseScore('Virality Score');
 
-             globalScoreValue.textContent = gs !== 0 ? gs : '--'; // Show '--' if score is 0 (likely missing/unparsed)
-             if (gs === 0) globalScoreValue.style.color = 'var(--text-color-secondary)'; // Default color if no score
+             globalScoreValue.textContent = gs !== 0 ? gs : '--';
+             if (gs === 0) globalScoreValue.style.color = 'var(--text-color-secondary)';
              else if (gs < 40) globalScoreValue.style.color = 'var(--warning-color)';
              else if (gs < 70) globalScoreValue.style.color = 'var(--tips-color)';
              else globalScoreValue.style.color = 'var(--secondary-color)';
@@ -863,317 +844,167 @@ Example 5: ${examplePost5}
              updateProgress(friendlinessScoreProgress, friendlinessScorePerc, fs);
              updateProgress(viralityScoreProgress, viralityScorePerc, vs);
 
-             updateTextSection(performanceOverviewDiv, 'Performance Overview', sections['Performance Overview']); // Uses default if missing
-             updateList(algoFeaturesUl, sections['Algorithm-Friendly Features']); // Uses default if missing
-             updateList(algoOpportunitiesUl, sections['Algorithm Optimization Opportunities']); // Uses default if missing
-             updateList(algoTipsUl, sections['Algorithm Optimization Tips']); // Uses default if missing
-             updateList(algoFactorsUl, sections['Key Algorithm Factors (General)']); // Uses default if missing
+             updateTextSection(performanceOverviewDiv, 'Performance Overview', sections['Performance Overview']);
+             updateList(algoFeaturesUl, sections['Algorithm-Friendly Features']);
+             updateList(algoOpportunitiesUl, sections['Algorithm Optimization Opportunities']);
+             updateList(algoTipsUl, sections['Algorithm Optimization Tips']);
+             updateList(algoFactorsUl, sections['Key Algorithm Factors (General)']);
 
              // --- Example Posts Section ---
-             const exampleContentRaw = sections['Example Optimized Posts'];
+             const exampleContentRaw = sections['AI-Generated Examples']; // Use the new section key
 
              // ** DEBUGGING: Display raw content for examples section **
-             exampleDebugContainer.innerHTML = ''; // Clear previous debug info
+             exampleDebugContainer.innerHTML = '';
              const debugDiv = document.createElement('div');
              debugDiv.className = 'debug-log';
-             debugDiv.innerHTML = `<strong>Raw Content for 'Example Optimized Posts' Section:</strong>\n\n`;
-             if (exampleContentRaw) {
-                 // Display escaped content to see exactly what was received
-                 debugDiv.innerHTML += exampleContentRaw.replace(/</g, "<").replace(/>/g, ">");
-             } else {
-                 debugDiv.innerHTML += '<strong>Section not found or content is empty/null.</strong>';
-             }
+             debugDiv.innerHTML = `<strong>Raw Content for 'AI-Generated Examples' Section:</strong>\n\n`;
+             debugDiv.innerHTML += exampleContentRaw ? exampleContentRaw.replace(/</g, "<").replace(/>/g, ">") : '<strong>Section not found or content is empty/null.</strong>';
              exampleDebugContainer.appendChild(debugDiv);
              console.log("--- Raw content being sent to updateExamplePosts ---");
              console.log(exampleContentRaw || "[Section Content is Empty or Undefined]");
              console.log("--- End raw content ---");
 
-             // Call the parser function, passing the raw content (could be undefined/null)
-             updateExamplePosts(examplePostsContainer, exampleContentRaw);
+             updateExamplePosts(examplePostsContainer, exampleContentRaw); // Pass potentially undefined content
          }
 
 
         function updateProgress(progressBar, percElement, value) {
-            const clampedValue = Math.max(0, Math.min(100, value || 0)); // Ensure value is number, default 0
+            // (Same as before)
+            const clampedValue = Math.max(0, Math.min(100, value || 0));
             progressBar.value = clampedValue;
             percElement.textContent = `${clampedValue}%`;
-
             let colorVar;
-             const lowThreshold = 40;
-             const medThreshold = 70;
-             const highColor = getComputedStyle(document.documentElement).getPropertyValue('--secondary-color').trim();
-             const medColor = getComputedStyle(document.documentElement).getPropertyValue('--tips-color').trim();
-             const lowColor = getComputedStyle(document.documentElement).getPropertyValue('--warning-color').trim();
-
-             // Set color based on value, default to secondary if value is 0 (likely missing)
-             if (clampedValue === 0) { colorVar = 'var(--text-color-secondary)'; }
-             else if (clampedValue < lowThreshold) { colorVar = lowColor; }
-             else if (clampedValue < medThreshold) { colorVar = medColor; }
-             else { colorVar = highColor; }
-
+            const lowThreshold = 40; const medThreshold = 70;
+            const highColor = getComputedStyle(document.documentElement).getPropertyValue('--secondary-color').trim();
+            const medColor = getComputedStyle(document.documentElement).getPropertyValue('--tips-color').trim();
+            const lowColor = getComputedStyle(document.documentElement).getPropertyValue('--warning-color').trim();
+            if (clampedValue === 0) colorVar = 'var(--text-color-secondary)';
+            else if (clampedValue < lowThreshold) colorVar = lowColor;
+            else if (clampedValue < medThreshold) colorVar = medColor;
+            else colorVar = highColor;
             progressBar.style.setProperty('--progress-value-color', colorVar);
-            progressBar.style.accentColor = colorVar; // Fallback
+            progressBar.style.accentColor = colorVar;
         }
 
          function updateTextSection(divElement, title, content) {
-             // Use a default message if content is falsy (null, undefined, empty string)
+             // (Same as before)
              const textContent = content || `No ${title.toLowerCase()} provided or recognized in the AI response.`;
-             divElement.innerHTML = ''; // Clear previous
-             const h3 = document.createElement('h3');
-             h3.textContent = title;
-             divElement.appendChild(h3);
+             divElement.innerHTML = '';
+             const h3 = document.createElement('h3'); h3.textContent = title; divElement.appendChild(h3);
              const p = document.createElement('p');
-             // Basic HTML escaping and newline conversion
-             p.innerHTML = textContent
-                 .replace(/</g, "<")
-                 .replace(/>/g, ">")
-                 .replace(/\n/g, '<br>');
+             p.innerHTML = textContent.replace(/</g, "<").replace(/>/g, ">").replace(/\n/g, '<br>');
              divElement.appendChild(p);
          }
 
         function updateList(ulElement, content) {
-             ulElement.innerHTML = ''; // Clear previous
-             if (!content) {
-                 ulElement.innerHTML = `<li>No specific items provided or recognized for this section.</li>`;
-                 return;
-             }
-             const items = content.split('\n');
-             let itemCount = 0;
+             // (Same as before)
+             ulElement.innerHTML = '';
+             if (!content) { ulElement.innerHTML = `<li>No specific items provided or recognized.</li>`; return; }
+             const items = content.split('\n'); let itemCount = 0;
              items.forEach(item => {
                  const trimmedItem = item.trim();
-                 // Regex improved slightly for robustness: handles *, -, digits. Captures main content.
                  const match = trimmedItem.match(/^[-*]\s+(.*)|^\d+[\.\)]\s+(.*)|^(\*\*.+?\*\*):\s*(.*)/);
                  let textContent = '';
-
-                 if (match) {
-                     // Combine capture groups that might contain the content
-                     textContent = match[1] || match[2] || (match[3] && match[4] ? `<strong>${match[3].replace(/\*\*/g,'')}</strong>: ${match[4]}` : match[3]?.replace(/\*\*/g,'')) || '';
-                 } else if (trimmedItem && !trimmedItem.startsWith('###') && trimmedItem.length > 3) {
-                     // Fallback for lines that don't start with common list markers but look like content
-                     textContent = trimmedItem;
-                 }
-
-                 textContent = textContent.trim(); // Trim the extracted text
-
+                 if (match) { textContent = match[1] || match[2] || (match[3] && match[4] ? `<strong>${match[3].replace(/\*\*/g,'')}</strong>: ${match[4]}` : match[3]?.replace(/\*\*/g,'')) || ''; }
+                 else if (trimmedItem && !trimmedItem.startsWith('###') && trimmedItem.length > 3) { textContent = trimmedItem; }
+                 textContent = textContent.trim();
                  if (textContent) {
-                     const li = document.createElement('li');
-                     // Basic HTML escaping for safety before setting innerHTML
-                     li.innerHTML = textContent.replace(/</g, "<").replace(/>/g, ">");
-                     ulElement.appendChild(li);
-                     itemCount++;
+                     const li = document.createElement('li'); li.innerHTML = textContent.replace(/</g, "<").replace(/>/g, ">"); ulElement.appendChild(li); itemCount++;
                  }
              });
-
-             if (itemCount === 0) {
-                 // If parsing resulted in no items, show a message
-                 ulElement.innerHTML = `<li>No specific items could be parsed from this section's content.</li>`;
-                 console.warn(`updateList: No list items parsed from content:`, content);
-             }
+             if (itemCount === 0) { ulElement.innerHTML = `<li>No specific items parsed.</li>`; console.warn(`updateList: No list items parsed from:`, content); }
          }
 
-        // --- Example Post Parser (Robust) ---
+        // --- Example Post Parser (Adapted) ---
         function updateExamplePosts(container, postsContent) {
-            container.innerHTML = ''; // Clear previous results
+            container.innerHTML = ''; // Clear previous
             console.log("--- Running updateExamplePosts ---");
 
-            // Handle cases where postsContent is missing or empty *before* trying to parse
             if (!postsContent || typeof postsContent !== 'string' || postsContent.trim() === '') {
                 console.warn("updateExamplePosts: Received empty or invalid postsContent.");
-                container.innerHTML = '<p>No example posts content found or provided by the AI response.</p>';
-                 // Display the fallback examples defined in the prompt
-                 renderFallbackExamples(container);
-                return; // Exit early
+                container.innerHTML = '<p>No AI-generated examples were provided in the response.</p>';
+                return; // Exit, no fallback anymore
             }
 
-            // ** More Robust Regex & Logic **
-            // - Looks for "Example" + space(s) + digit + optional colon, at the start of a line.
-            // - Captures the rest of that line *and* subsequent lines until the next "Example" or end of string.
-            const exampleRegex = /^Example\s+(\d+)\s*:?(.*?)(\n|$)([\s\S]*?)(?=^Example\s+\d|\Z)/gim;
-            // Explanation:
-            // ^Example\s+(\d+)\s*:?   -> Marker like "Example 1:" at line start
-            // (.*?)(\n|$)             -> Captures rest of marker line (non-greedy), handles newline/end
-            // ([\s\S]*?)              -> Captures actual post content across lines (non-greedy)
-            // (?=^Example\s+\d|\Z)  -> Positive lookahead: stop before next marker or end of string
+            // Try a flexible approach: Split by potential markers or double newlines
+            // Markers: "Example:", "-", "*", "1.", etc. at the start of a line
+            const potentialExamples = postsContent.split(/\n(?=Example:|[-*]|\d+\.\s)|\n\n+/); // Split on marker lines or double newlines
 
-            let matches = Array.from(postsContent.matchAll(exampleRegex));
-            console.log(`updateExamplePosts: Found ${matches.length} potential examples using regex.`);
+            console.log(`updateExamplePosts: Found ${potentialExamples.length} potential examples using split.`);
 
-            if (matches.length === 0) {
-                console.warn("updateExamplePosts: No 'Example N:' markers found using complex regex. Trying simpler split.");
-                // Fallback: Try splitting by "Example \d:" lines if the complex regex fails
-                const lines = postsContent.split('\n');
-                const examples = [];
-                let currentExampleLines = [];
-                let currentExampleNum = 0;
-                for (const line of lines) {
-                    const markerMatch = line.match(/^Example\s+(\d+)\s*:?\s*(.*)/i);
-                    if (markerMatch) {
-                        if (currentExampleNum > 0 && currentExampleLines.length > 0) {
-                            examples.push({ num: currentExampleNum, content: currentExampleLines.join('\n').trim() });
-                        }
-                        currentExampleNum = parseInt(markerMatch[1], 10);
-                        currentExampleLines = markerMatch[2] ? [markerMatch[2].trim()] : []; // Start with rest of marker line if any
-                    } else if (currentExampleNum > 0) {
-                        currentExampleLines.push(line); // Add subsequent lines
-                    }
-                }
-                 // Add the last example
-                if (currentExampleNum > 0 && currentExampleLines.length > 0) {
-                    examples.push({ num: currentExampleNum, content: currentExampleLines.join('\n').trim() });
-                }
-
-                console.log(`updateExamplePosts: Found ${examples.length} examples using line splitting fallback.`);
-
-                if (examples.length > 0) {
-                    examples.forEach(ex => {
-                         if (ex.content) {
-                             renderExamplePost(container, `Example ${ex.num}:`, ex.content);
-                         }
-                     });
-                     if (examples.length < 5) {
-                        addParsingWarning(container, examples.length);
-                     }
-                } else {
-                    console.error("updateExamplePosts: Failed to parse examples using both regex and line splitting. Displaying raw block and fallbacks.");
-                    container.innerHTML = `<p>Could not parse example posts from the AI response. Displaying raw content and default examples:</p>`;
-                    renderExamplePost(container, "Unparsed Raw AI Content", postsContent);
-                    renderFallbackExamples(container);
-                }
-                return;
-            }
-
-            // Process matches from the primary regex
             let exampleCount = 0;
-            matches.forEach(match => {
-                const num = match[1];
-                const markerLineContent = (match[2] || '').trim(); // Content on the same line as marker
-                const subsequentContent = (match[4] || '').trim(); // Content on following lines
-                let fullContent = markerLineContent;
-                if (subsequentContent) {
-                    fullContent = markerLineContent ? markerLineContent + '\n' + subsequentContent : subsequentContent;
-                }
+            potentialExamples.forEach((post, index) => {
+                const trimmedPost = post.trim();
+                 // Clean up common markers if they are the *only* thing on the first line
+                 const cleanedPost = trimmedPost.replace(/^(Example:|[-*]|\d+\.\s)\s*/, '');
 
-                console.log(`updateExamplePosts: Processing Example ${num}. Content Length=${fullContent.length}`);
-
-                if (fullContent) {
-                    renderExamplePost(container, `Example ${num}:`, fullContent);
+                if (cleanedPost && cleanedPost.length > 10) { // Filter out empty lines or very short fragments
+                    renderExamplePost(container, `AI Example ${index + 1}`, cleanedPost);
                     exampleCount++;
                 } else {
-                    console.warn(`updateExamplePosts: Content for Example ${num} appears empty after trimming.`);
-                    // Optionally render a placeholder saying content was empty
-                     renderExamplePost(container, `Example ${num}:`, "[AI provided no content for this example]");
+                    console.log(`Skipping potential example ${index + 1} as it's too short or empty after cleaning:`, post);
                 }
             });
 
-             if (exampleCount < 5) {
-                 addParsingWarning(container, exampleCount);
-             }
-
-            console.log(`updateExamplePosts: Successfully rendered ${exampleCount} example posts.`);
+            if (exampleCount === 0) {
+                console.error("updateExamplePosts: Failed to parse any valid examples from the AI content:", postsContent);
+                container.innerHTML = `<p>Could not parse valid examples from the AI response. Check the raw content in the debug log below.</p>`;
+            } else {
+                 console.log(`updateExamplePosts: Successfully rendered ${exampleCount} AI-generated example posts.`);
+            }
             console.log("--- Finished updateExamplePosts ---");
         }
-
-        // Helper to add warning if fewer than 5 examples parsed
-        function addParsingWarning(container, count) {
-             console.warn(`updateExamplePosts: Rendered only ${count} examples. Expected 5. Check raw content.`);
-             const warningP = document.createElement('p');
-             warningP.style.color = 'var(--warning-color)';
-             warningP.style.fontSize = '0.9em';
-             warningP.style.marginTop = '15px';
-             warningP.textContent = `Note: Only found ${count} valid examples in the AI response (expected 5). Check the raw content above.`;
-             container.appendChild(warningP);
-             // Optionally show fallback examples if parsing failed significantly
-             if (count < 3) { // Arbitrary threshold
-                 renderFallbackExamples(container, true); // Add a header indicating they are fallbacks
-             }
-        }
-
-        // Helper to render the predefined fallback examples
-        function renderFallbackExamples(container, addHeader = false) {
-             if (addHeader) {
-                 const headerP = document.createElement('p');
-                 headerP.style.marginTop = '20px';
-                 headerP.style.marginBottom = '10px';
-                 headerP.style.fontWeight = 'bold';
-                 headerP.textContent = 'Displaying default examples due to parsing issue:';
-                 container.appendChild(headerP);
-             }
-            const fallbackExamples = [
-                 `Kinda dragging today, ngl. 🥱 Sometimes you just gotta call a timeout & hit reset. What's your non-negotiable recharge ritual when you're feeling drained? Spill the beans! 👇`,
-                 `Running on low battery today 🔋 but powering through *gently*. Quick reminder: self-care isn't selfish, it's essential maintenance! What’s one tiny victory you’re aiming for today to lift your spirits? ✨`,
-                 `Yeah, feeling under the weather is a definite mood killer. 🤒 But hey, it's okay to not be 100%. Give yourself permission to just *be* for a bit. The bounce-back is always stronger. 💪 What helps you ride out the low-energy waves?`,
-                 `Anyone else feel like their internal 'check engine' light is blinking today? 😂 Definitely need a system reboot over here. Taking it easy & focusing on the small stuff. Drop your top quick mood boosters! Need some inspo. 🙏`,
-                 `Definitely feeling a bit off-kilter today. Channeling major reset vibes. 🧘‍♀️ Sometimes you just gotta lean into the quiet & trust the process. Tomorrow's a fresh start. What’s one good thing (big or small) lighting up your day today? ☀️`
-            ];
-            fallbackExamples.forEach((content, index) => {
-                 renderExamplePost(container, `Example ${index + 1}:`, content);
-             });
-             console.log("Rendered fallback examples.");
-        }
-
+        // Note: addParsingWarning and renderFallbackExamples are removed
 
         function renderExamplePost(container, title, content) {
+            // (Same as before)
             if (!content || !title) return;
-
-            const postDiv = document.createElement('div');
-            postDiv.className = 'post-card';
-
-            const authorDiv = document.createElement('div');
-            authorDiv.className = 'author';
-            // Escape title just in case, though less critical than content
+            const postDiv = document.createElement('div'); postDiv.className = 'post-card';
+            const authorDiv = document.createElement('div'); authorDiv.className = 'author';
             authorDiv.textContent = title.replace(/</g, "<").replace(/>/g, ">");
-
-            const contentDiv = document.createElement('div');
-            contentDiv.className = 'content';
-            // Escape content and handle newlines properly for display
-            contentDiv.innerHTML = content
-                 .replace(/</g, "<") // Escape HTML tags
-                 .replace(/>/g, ">")
-                 .replace(/\n/g, '<br>'); // Convert newlines to <br> for HTML display
-
-            const statsDiv = document.createElement('div');
-            statsDiv.className = 'stats';
-            statsDiv.textContent = '✨ AI Optimized Example';
-
-            postDiv.appendChild(authorDiv);
-            postDiv.appendChild(contentDiv);
-            postDiv.appendChild(statsDiv);
+            const contentDiv = document.createElement('div'); contentDiv.className = 'content';
+            contentDiv.innerHTML = content.replace(/</g, "<").replace(/>/g, ">").replace(/\n/g, '<br>');
+            const statsDiv = document.createElement('div'); statsDiv.className = 'stats';
+            statsDiv.textContent = '✨ AI Generated Example'; // Updated label
+            postDiv.appendChild(authorDiv); postDiv.appendChild(contentDiv); postDiv.appendChild(statsDiv);
             container.appendChild(postDiv);
         }
 
-        function showLoading(isLoading) {
-            loadingDiv.style.display = isLoading ? 'flex' : 'none';
-            analyzeButton.disabled = isLoading;
+        // ** NEW function for UI loading state **
+        function setLoadingState(isLoading) {
             if (isLoading) {
-                // Clear previous results *when loading starts*
-                clearPreviousResults();
+                analyzeButtonText.textContent = 'Analyzing...';
+                analyzeButtonSpinner.style.display = 'inline-block';
+                analyzeButton.disabled = true;
+                postContentInput.classList.add('textarea-loading');
+                loadingDiv.style.display = 'flex'; // Show the main loading spinner section
+            } else {
+                analyzeButtonText.textContent = 'Analyze Post';
+                analyzeButtonSpinner.style.display = 'none';
+                analyzeButton.disabled = false;
+                postContentInput.classList.remove('textarea-loading');
+                loadingDiv.style.display = 'none'; // Hide the main loading spinner section
             }
         }
 
+
         function showResponseAreas(isVisible, skipError = false) {
-             // Ensure visibility logic correctly handles the initial state and transitions
+            // (Same as before)
              responseAreas.forEach(area => {
                  const isErrorArea = area.id === 'error-message-container';
                  const targetDisplay = area.classList.contains('score-section') ? 'flex' : 'block';
-
                  if (isErrorArea) {
-                     // Error area handling: only hide if explicitly told to and skipError is false
                      if (!isVisible && !skipError) {
                          area.classList.remove('visible');
-                         setTimeout(() => { if (!area.classList.contains('visible')) area.style.display = 'none'; }, 700); // Hide after transition
+                         setTimeout(() => { if (!area.classList.contains('visible')) area.style.display = 'none'; }, 700);
                      }
-                     // Don't automatically show error area here; displayErrorMessage handles that
                  } else {
-                     // Handling for regular result areas
                      if (isVisible) {
-                         area.style.display = targetDisplay; // Set display first
-                         // Use requestAnimationFrame or tiny timeout to ensure display is applied before adding class
-                         requestAnimationFrame(() => {
-                             area.classList.add('visible');
-                         });
+                         area.style.display = targetDisplay;
+                         requestAnimationFrame(() => area.classList.add('visible'));
                      } else {
                          area.classList.remove('visible');
-                         setTimeout(() => { if (!area.classList.contains('visible')) area.style.display = 'none'; }, 700); // Hide after transition
+                         setTimeout(() => { if (!area.classList.contains('visible')) area.style.display = 'none'; }, 700);
                      }
                  }
              });
@@ -1181,57 +1012,43 @@ Example 5: ${examplePost5}
 
 
          function displayErrorMessage(message) {
-             errorMessageContainer.innerHTML = ''; // Clear previous errors
-             const errorPopup = document.createElement('div');
-             errorPopup.className = 'error-message-popup';
-             // Use innerHTML carefully, ensure message content is safe or escaped if dynamic
-             errorPopup.innerHTML = `
-                <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>Analysis Problem</h2>
-                <p>${message}</p> <!-- Assuming message is simple text or pre-sanitized -->
-            `;
+             // (Same as before)
+             errorMessageContainer.innerHTML = '';
+             const errorPopup = document.createElement('div'); errorPopup.className = 'error-message-popup';
+             errorPopup.innerHTML = `<h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>Analysis Problem</h2><p>${message}</p>`;
              errorMessageContainer.appendChild(errorPopup);
-             errorMessageContainer.style.display = 'block'; // Make sure the container is visible
-             requestAnimationFrame(() => {
-                 errorMessageContainer.classList.add('visible'); // Trigger transition
-             });
-
-             // Ensure other results areas are hidden when an error is displayed
-             showResponseAreas(false, true); // Hide others, skip hiding the error message itself
+             errorMessageContainer.style.display = 'block';
+             requestAnimationFrame(() => errorMessageContainer.classList.add('visible'));
+             showResponseAreas(false, true);
          }
 
          function clearPreviousResults() {
-            // Hide all response areas smoothly
-            showResponseAreas(false, false); // Hide all, including potential old errors
-            // Clear the content *after* the hide transition might have started
-            // Use setTimeout to delay clearing content until after fade-out starts
+            // (Same as before)
+            showResponseAreas(false, false);
             setTimeout(() => {
-                 resetResultDisplay(); // Clear text/progress/examples
-                 errorMessageContainer.innerHTML = ''; // Specifically clear error messages
-                 errorMessageContainer.classList.remove('visible'); // Ensure class is removed
-                 errorMessageContainer.style.display = 'none'; // Ensure display is none
-                 exampleDebugContainer.innerHTML = ''; // Clear debug area
-            }, 50); // Small delay
+                 resetResultDisplay();
+                 errorMessageContainer.innerHTML = '';
+                 errorMessageContainer.classList.remove('visible');
+                 errorMessageContainer.style.display = 'none';
+                 exampleDebugContainer.innerHTML = '';
+            }, 50);
          }
 
          function resetResultDisplay() {
-              // Reset scores and progress bars
+              // (Same as before)
               globalScoreValue.textContent = '--';
-              globalScoreValue.style.color = 'var(--text-color-secondary)'; // Reset color
+              globalScoreValue.style.color = 'var(--text-color-secondary)';
               updateProgress(engagementScoreProgress, engagementScorePerc, 0);
               updateProgress(friendlinessScoreProgress, friendlinessScorePerc, 0);
               updateProgress(viralityScoreProgress, viralityScorePerc, 0);
-
-             // Reset text sections with placeholder text
-             const placeholder = '<p>Pending analysis...</p>';
-             performanceOverviewDiv.innerHTML = `<h3>Performance Overview</h3>${placeholder}`;
-             algoFeaturesUl.innerHTML = `<li>Pending analysis...</li>`;
-             algoOpportunitiesUl.innerHTML = `<li>Pending analysis...</li>`;
-             algoTipsUl.innerHTML = `<li>Pending analysis...</li>`;
-             algoFactorsUl.innerHTML = `<li>Pending analysis...</li>`;
-             examplePostsContainer.innerHTML = `<p>Examples will appear here...</p>`;
-             exampleDebugContainer.innerHTML = ''; // Clear debug area
-
-              // Reset progress bar colors explicitly
+              const placeholder = '<p>Pending analysis...</p>';
+              performanceOverviewDiv.innerHTML = `<h3>Performance Overview</h3>${placeholder}`;
+              algoFeaturesUl.innerHTML = `<li>Pending analysis...</li>`;
+              algoOpportunitiesUl.innerHTML = `<li>Pending analysis...</li>`;
+              algoTipsUl.innerHTML = `<li>Pending analysis...</li>`;
+              algoFactorsUl.innerHTML = `<li>Pending analysis...</li>`;
+              examplePostsContainer.innerHTML = `<p>Examples will appear here...</p>`;
+              exampleDebugContainer.innerHTML = '';
               const defaultColor = 'var(--text-color-secondary)';
               [engagementScoreProgress, friendlinessScoreProgress, viralityScoreProgress].forEach(pb => {
                  pb.style.setProperty('--progress-value-color', defaultColor);
