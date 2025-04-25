@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>X-Post Analyzer Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <style>
+        :root {
+            --bg-color: #1a1a1a; /* Dark background */
+            --container-bg: #2a2a2a; /* Slightly lighter container */
+            --text-color: #e0e0e0; /* Light text */
+            --primary-color: #1DA1F2; /* X blue */
+            --secondary-color: #4CAF50; /* Green for positive scores/features */
+            --warning-color: #FFC107; /* Yellow for opportunities */
+            --tips-color: #03A9F4;   /* Light blue for tips */
+            --border-color: #444;
+            --card-bg: #333;
+            --progress-bg: #555;
+            --error-bg: #5a2d2d;
+            --error-border: #a85353;
+            --error-text: #fdd;
+            /* Custom property for progress bar color */
+            --progress-value-color: var(--secondary-color);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .main-container {
+            display: flex;
+            max-width: 1200px;
+            margin: 20px auto;
+            gap: 20px;
+            background-color: var(--container-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        .left-panel {
+            flex: 2; /* Takes 2/3rds of the space */
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .right-panel {
+            flex: 1; /* Takes 1/3rd of the space */
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .input-section, .score-section, .analysis-section, .example-posts-section, .post-card, .error-message-popup {
+            background-color: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+         .error-message-popup {
+             background-color: var(--error-bg);
+             border-color: var(--error-border);
+             color: var(--error-text);
+             margin-bottom: 15px; /* Add space below error */
+         }
+         .error-message-popup h2 {
+             color: var(--error-text);
+             border-bottom-color: var(--error-border);
+         }
+
+        h1, h2, h3 {
+            color: var(--text-color);
+            margin-top: 0;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+         h1 { font-size: 1.8em; text-align: center; border: none; padding: 0; margin-bottom: 20px; }
+         h2 { font-size: 1.3em; color: var(--primary-color); }
+         h3 { font-size: 1.1em; margin-bottom: 10px;} /* Adjusted h3 margin */
+
+        textarea, button {
+            width: 100%;
+            padding: 12px 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box; /* Include padding in width */
+            background-color: #444;
+            color: var(--text-color);
+            border: 1px solid #666;
+        }
+        textarea {
+            min-height: 100px; /* Ensure decent height */
+        }
+        textarea::placeholder { color: #aaa; }
+
+        button {
+            background: linear-gradient(135deg, var(--primary-color), #007bff);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.3s ease, transform 0.1s ease;
+        }
+        button:hover { background: linear-gradient(135deg, #007bff, #0056b3); }
+        button:active { transform: scale(0.98); }
+        button:disabled { background: #666; cursor: not-allowed; opacity: 0.6; }
+
+        .score-section {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+        }
+
+        .global-score {
+            text-align: center;
+            flex-shrink: 0; /* Prevent shrinking */
+            padding-right: 20px; /* Add some space */
+        }
+        .global-score .score-value {
+            font-size: 3em;
+            font-weight: bold;
+            color: var(--secondary-color);
+            line-height: 1;
+        }
+        .global-score .score-label {
+            font-size: 0.9em;
+            color: #bbb;
+        }
+
+        .component-scores {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .score-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .score-item label {
+            width: 100px; /* Fixed width for labels */
+            font-size: 0.9em;
+            flex-shrink: 0;
+        }
+        progress {
+            flex-grow: 1;
+            height: 12px;
+            border-radius: 6px;
+            overflow: hidden;
+            border: none;
+            background-color: var(--progress-bg);
+            accent-color: var(--progress-value-color); /* Standard way for FF */
+        }
+        /* Styling progress bar appearance for Webkit using custom property */
+        progress::-webkit-progress-bar {
+            background-color: var(--progress-bg);
+            border-radius: 6px;
+        }
+        progress::-webkit-progress-value {
+            background-color: var(--progress-value-color); /* Use the custom property */
+            border-radius: 6px;
+            transition: background-color 0.5s ease, width 0.5s ease;
+        }
+        /* Styling progress bar appearance for Firefox */
+        progress::-moz-progress-bar {
+            background-color: var(--progress-value-color); /* Use the custom property */
+            border-radius: 6px;
+            transition: background-color 0.5s ease, width 0.5s ease;
+        }
+
+        .score-item .score-percentage {
+            font-size: 0.9em;
+            font-weight: bold;
+            min-width: 35px; /* Ensure space for "100%" */
+            text-align: right;
+        }
+
+        .analysis-section p, .analysis-section ul {
+             margin-bottom: 15px; /* Space between paragraphs/lists */
+        }
+        .analysis-section ul {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 15px 0; /* Reset margin top/bottom, add bottom */
+        }
+        .analysis-section li {
+            margin-bottom: 10px;
+            padding-left: 25px;
+            position: relative;
+        }
+        .analysis-section li::before {
+            content: ''; /* Default empty */
+            position: absolute;
+            left: 0;
+            top: 2px; /* Adjusted top alignment slightly */
+            font-size: 1.1em; /* Adjust icon size */
+            line-height: 1.4; /* Align icon better */
+            display: inline-block;
+             width: 20px; /* Ensure consistent spacing */
+             text-align: center;
+        }
+
+        /* Icons for list items */
+        .features li::before { content: '✅'; color: var(--secondary-color); }
+        .opportunities li::before { content: '⚠️'; color: var(--warning-color); }
+        .tips li::before { content: '🔧'; color: var(--tips-color); }
+        .factors li::before { content: '🔑'; color: #ccc; }
+
+
+        .loading {
+            display: none; /* Hidden by default */
+            text-align: center;
+            margin: 20px 0;
+            color: #aaa;
+            align-items: center;
+            justify-content: center;
+            gap: 10px; /* Space between spinner and text */
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border-left-color: var(--primary-color);
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .response-area { /* General container for dynamic content */
+           min-height: 50px; /* Ensure it has some height initially */
+           /* Transition for smooth appearance */
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+            display: none; /* Hide initially */
+        }
+         .response-area.visible {
+             opacity: 1;
+             display: block; /* Default display */
+         }
+         .score-section.visible {
+             display: flex; /* Override for flex layout */
+         }
+         .analysis-section.visible, .example-posts-section.visible {
+             display: block; /* Ensure these are block */
+         }
+
+
+         .post-card {
+             font-size: 0.9em;
+             line-height: 1.4;
+             margin-bottom: 15px; /* Space between example posts */
+             border-left: 3px solid var(--primary-color); /* Accent line */
+             padding: 15px 15px 15px 20px; /* Adjust padding */
+             background-color: #383838; /* Slightly different bg for contrast */
+             border-radius: 5px;
+         }
+         .post-card:last-child {
+             margin-bottom: 0;
+         }
+         .post-card .author {
+             font-weight: bold;
+             margin-bottom: 8px; /* More space below title */
+             color: var(--primary-color); /* Use primary color for title */
+             font-size: 1em; /* Slightly larger title */
+             display: block; /* Ensure it takes full width */
+         }
+         .post-card .content {
+             margin-bottom: 10px;
+             white-space: pre-wrap; /* Respect newlines in content */
+             color: var(--text-color); /* Ensure text is readable */
+         }
+         .post-card .stats {
+             font-size: 0.8em;
+             color: #aaa;
+             text-align: right;
+         }
+
+        /* Responsive adjustments */
+        @media (max-width: 900px) {
+            .main-container {
+                flex-direction: column;
+            }
+            .left-panel, .right-panel {
+                flex: none; /* Reset flex sizing */
+                width: 100%;
+                box-sizing: border-box; /* Ensure padding is included */
+            }
+        }
+         @media (max-width: 600px) {
+             body { padding: 10px; }
+             .main-container { padding: 15px; }
+             .input-section, .score-section, .analysis-section, .example-posts-section, .post-card { padding: 15px; }
+             .score-section { flex-direction: column; gap: 20px; align-items: stretch; }
+             .global-score { margin-bottom: 15px; padding-right: 0; }
+             .score-item label { width: 90px; } /* Slightly reduce label width */
+             h1 { font-size: 1.5em; }
+             h2 { font-size: 1.2em; }
+             .analysis-section li { padding-left: 22px; } /* Adjust list padding */
+             .analysis-section li::before { width: 18px; top: 3px;} /* Adjust icon spacing and position*/
+             .post-card { padding: 15px; }
+         }
+
+    </style>
+    <!-- Puter.com script -->
+    <script src="https://js.puter.com/v2/"></script>
+</head>
+<body>
+
+    <div class="main-container">
+        <div class="left-panel">
+            <h1>X-Post Analyzer Pro 🚀</h1>
+            <div class="input-section">
+                <h2>Enter Post Content</h2>
+                <textarea id="post-content" rows="6" placeholder="Paste your X (Twitter) post text here..."></textarea>
+                <button id="analyze-button">Analyze Post</button>
+                <div id="loading" class="loading">
+                    <div class="spinner"></div>
+                    <span>Deep Analyzing with AI...</span>
+                </div>
+            </div>
+
+            <!-- Container for potential error messages -->
+            <div id="error-message-container" class="response-area"></div>
+
+            <div class="score-section response-area" id="score-area"> <!-- Added ID -->
+                <div class="global-score">
+                    <div id="global-score-value" class="score-value">--</div>
+                    <div class="score-label">Global Score</div>
+                </div>
+                <div class="component-scores">
+                    <div class="score-item">
+                        <label for="engagement-score">Engagement</label>
+                        <progress id="engagement-score" value="0" max="100"></progress>
+                        <span id="engagement-score-perc" class="score-percentage">--%</span>
+                    </div>
+                    <div class="score-item">
+                        <label for="friendliness-score">Friendliness</label>
+                        <progress id="friendliness-score" value="0" max="100"></progress>
+                        <span id="friendliness-score-perc" class="score-percentage">--%</span>
+                    </div>
+                    <div class="score-item">
+                        <label for="virality-score">Virality</label>
+                        <progress id="virality-score" value="0" max="100"></progress>
+                        <span id="virality-score-perc" class="score-percentage">--%</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="analysis-section response-area" id="analysis-area"> <!-- Added ID -->
+                 <h2>Algorithm Analysis</h2>
+
+                 <div id="performance-overview">
+                    <h3>Performance Overview</h3>
+                    <p>Analysis details will appear here...</p>
+                 </div>
+
+                 <div id="algo-features" class="features">
+                    <h3>Algorithm-Friendly Features</h3>
+                    <ul><li>Pending analysis...</li></ul>
+                 </div>
+
+                 <div id="algo-opportunities" class="opportunities">
+                    <h3>Algorithm Optimization Opportunities</h3>
+                    <ul><li>Pending analysis...</li></ul>
+                 </div>
+
+                 <div id="algo-tips" class="tips">
+                     <h3>Algorithm Optimization Tips</h3>
+                     <ul><li>Pending analysis...</li></ul>
+                 </div>
+
+                 <div id="algo-factors" class="factors">
+                     <h3>Key Algorithm Factors (General)</h3>
+                     <ul><li>Pending analysis...</li></ul>
+                 </div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="example-posts-section response-area" id="examples-area"> <!-- Added ID -->
+                <h2>Example Optimized Posts</h2>
+                <div id="example-posts-container">
+                    <!-- Example posts will be loaded here -->
+                    <p>Examples will appear here...</p>
+                </div>
+            </div>
+             <!-- Placeholder for potential future additions -->
+        </div>
+    </div>
+
+
+    <script>
+        // --- DOM Element References ---
+        const analyzeButton = document.getElementById('analyze-button');
+        const postContentInput = document.getElementById('post-content');
+        const loadingDiv = document.getElementById('loading');
+        const errorMessageContainer = document.getElementById('error-message-container');
+
+        // Response Area Containers
+        const scoreArea = document.getElementById('score-area');
+        const analysisArea = document.getElementById('analysis-area');
+        const examplesArea = document.getElementById('examples-area');
+        const responseAreas = [scoreArea, analysisArea, examplesArea, errorMessageContainer]; // Added error container here
+
+        // Specific Result Elements
+        const globalScoreValue = document.getElementById('global-score-value');
+        const engagementScoreProgress = document.getElementById('engagement-score');
+        const engagementScorePerc = document.getElementById('engagement-score-perc');
+        const friendlinessScoreProgress = document.getElementById('friendliness-score');
+        const friendlinessScorePerc = document.getElementById('friendliness-score-perc');
+        const viralityScoreProgress = document.getElementById('virality-score');
+        const viralityScorePerc = document.getElementById('virality-score-perc');
+        const performanceOverviewDiv = document.getElementById('performance-overview');
+        const algoFeaturesUl = document.querySelector('#algo-features ul');
+        const algoOpportunitiesUl = document.querySelector('#algo-opportunities ul');
+        const algoTipsUl = document.querySelector('#algo-tips ul');
+        const algoFactorsUl = document.querySelector('#algo-factors ul');
+        const examplePostsContainer = document.getElementById('example-posts-container');
+
+        // --- Configuration ---
+        const analysisModel = "openrouter:openai/gpt-4o"; // Use a strong model
+
+        // --- Initial Content ---
+        const initialTweetContent = `I think luck can be a tricky thing sometimes. 🤗 It feels like it's playing hard to get, but maybe it's just waiting for the right moment. Remember, persistence often beats chance. Keep pushing forward! What are you doing today to create your own luck?`;
+
+        // --- Event Listener ---
+        analyzeButton.addEventListener('click', handleAnalysisRequest);
+
+        // --- Initial Setup ---
+        document.addEventListener('DOMContentLoaded', () => {
+             postContentInput.value = initialTweetContent; // Set initial tweet
+             clearPreviousResults(); // Set initial state correctly
+         });
+
+        // --- Main Analysis Function ---
+        async function handleAnalysisRequest() {
+            const postContent = postContentInput.value.trim();
+
+            if (!postContent) {
+                displayErrorMessage('Post content cannot be empty.');
+                return;
+            }
+
+            clearPreviousResults();
+            showLoading(true);
+
+            // Construct the detailed prompt for the AI
+            const analysisPrompt = buildEnhancedAnalysisPrompt(postContent);
+            console.log("Sending prompt:", analysisPrompt); // Log the prompt
+
+            try {
+                // Make the API call using Puter's AI module
+                const rawResponse = await puter.ai.chat(analysisPrompt, { model: analysisModel });
+
+                // Extract text response safely
+                const responseText = extractTextFromResponse(rawResponse);
+                console.log("Received response text length:", responseText?.length); // Log length
+
+                if (!responseText || responseText.trim() === '') {
+                    throw new Error("Received empty response from AI.");
+                }
+
+                // Parse and display
+                parseAndDisplayResponse(responseText);
+
+                showResponseAreas(true, true); // Make results visible (skipping error area initially)
+
+            } catch (error) {
+                console.error("Error during analysis:", error);
+                displayErrorMessage(`Analysis failed. Model: ${analysisModel}. Error: ${error.message}. Check console (F12) for details.`);
+                showResponseAreas(false, false); // Hide regular results
+                errorMessageContainer.classList.add('visible'); // Ensure error is visible
+                errorMessageContainer.style.display = 'block';
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // --- Helper Functions ---
+
+        function buildEnhancedAnalysisPrompt(postContent) {
+            // Enhanced prompt requesting 5 deep, thoughtful examples
+            return `
+Act as a world-class X (formerly Twitter) algorithm strategist and philosopher of online communication. Analyze the following post draft with extreme scrutiny, focusing on maximizing reach, engagement, depth of thought, and positive algorithmic signals based on CURRENT best practices (as of early 2025). Assume the algorithm values genuine interaction, dwell time, and meaningful replies.
+
+Post Draft:
+---
+${postContent}
+---
+
+Provide your detailed analysis STRICTLY in the following format. Use the exact headings and Markdown lists. Do NOT add any fluff, intro, or conclusion outside this structure. Scores MUST be integers between 0 and 100. Base scores on predicted algorithmic performance AND depth/impact.
+
+### Global Score:
+[Integer Score 0-100] - Overall predicted performance & impact potential.
+
+### Engagement Score:
+[Integer Score 0-100] - Likelihood of generating *meaningful* interaction (quality replies, quotes, saves, clicks) beyond simple likes.
+
+### Friendliness Score:
+[Integer Score 0-100] - Assesses clarity, tone, and constructive potential. High scores for posts inviting thoughtful discussion, low for vague, aggressive, or overly cliché content.
+
+### Virality Score:
+[Integer Score 0-100] - Potential for resonance and sharing based on uniqueness, emotional depth, insight, or counter-intuitive perspectives.
+
+### Performance Overview:
+[Concise (3-4 sentence) summary. Highlight the core strength and biggest weakness regarding both algorithm *and* genuine impact. State the overall potential clearly.]
+
+### Algorithm-Friendly Features:
+[Be specific. List concrete positive elements observed for algorithm AND meaningfulness.]
+- Example: "Poses an open-ended, reflective question encouraging thoughtful replies."
+- Example: "Uses relatable human emotion (struggle with luck)."
+- Example: "Positive and encouraging final call-to-action."
+- [...]
+
+### Algorithm Optimization Opportunities:
+[Be specific. List concrete weaknesses or missed opportunities for algorithm AND depth.]
+- Example: "Lacks a unique perspective or specific anecdote; feels generic."
+- Example: "Doesn't challenge the reader or offer a fresh take on 'persistence'."
+- Example: "The question, while good, could be more provocative or specific."
+- Example: "Absence of relevant hashtags (e.g., #mindset, #philosophy, #creatorlife)."
+- Example: "No visual element to enhance dwell time or emotional connection."
+- [...]
+
+### Algorithm Optimization Tips:
+[Provide 3-5 highly specific, actionable recommendations focusing on DEEPER impact and algorithm synergy.]
+- Example: "Reframe 'persistence beats chance' with a specific micro-story or metaphor. Why: Concrete examples resonate more deeply and increase dwell time."
+- Example: "Instead of 'What are you doing?', ask 'What's *one tiny action* you're taking today to tilt the odds, even if luck feels distant?' Why: More specific, less intimidating, prompts concrete answers."
+- Example: "Add a relevant, thought-provoking image (e.g., a path diverging, dice in hand). Why: Visuals stop the scroll and add emotional context."
+- Example: "Introduce a slightly counter-intuitive idea, e.g., 'Maybe luck isn't something to *wait* for, but something we *build* with deliberate choices?' Why: Sparks curiosity and debate, leading to higher quality engagement."
+- Example: "Use 1-2 core hashtags like #MindsetShift #DailyPractice. Why: Targets engaged communities interested in deeper reflection."
+- [...]
+
+### Key Algorithm Factors (General):
+[List key factors X's algorithm likely considers *today*. Be comprehensive.]
+- Early Engagement Velocity & Quality (thoughtful replies matter most)
+- Dwell Time (on post, media, and profile)
+- Profile Clicks & Follows from the post
+- Use of Rich Media (Images, Videos, GIFs, Polls) - Context matters
+- Hashtag Relevance & Community Fit
+- Negative Feedback Signals (Mutes, Blocks, Reports, 'Not Interested')
+- Account Authority & Topical Consistency
+- Replies/Quotes indicating real conversation
+- Link Clicks (if applicable and contextually relevant)
+- Recency and Strategic Posting Times
+- Author Interaction in Replies (critical for community building)
+- Post Edit History (potential signal)
+
+### Example Optimized Posts:
+[Provide **FIVE (5)** distinct, optimized versions based on your Tips. They MUST be **cool, impactful, meaningful, and thoughtful**, avoiding fluff or generic influencer speak. Show different angles – philosophical, actionable, narrative, questioning. Ensure they are fully written out and clearly separated.]
+
+Example 1: [Type: e.g., Philosophical Reframe]
+[Optimized Post Content 1]
+
+Example 2: [Type: e.g., Action-Oriented Micro-Question]
+[Optimized Post Content 2]
+
+Example 3: [Type: e.g., Contrarian Take]
+[Optimized Post Content 3]
+
+Example 4: [Type: e.g., Narrative Snippet]
+[Optimized Post Content 4]
+
+Example 5: [Type: e.g., Visual Metaphor Prompt]
+[Optimized Post Content 5]
+`;
+        }
+
+
+        function extractTextFromResponse(rawResponse) {
+            // console.log("Raw API Response Type:", typeof rawResponse);
+            // console.log("Raw API Response Value:", rawResponse);
+
+            // Standard Puter.ai structure
+            if (typeof rawResponse === 'object' && rawResponse !== null && rawResponse.message && typeof rawResponse.message.content === 'string') {
+                return rawResponse.message.content;
+            }
+            // Direct string response (less common now)
+            else if (typeof rawResponse === 'string') {
+                return rawResponse;
+            }
+             // Handling potential nested structures or alternative formats
+            else if (typeof rawResponse === 'object' && rawResponse !== null) {
+                 // Add checks for other plausible structures here if needed
+                if (typeof rawResponse.text === 'string') return rawResponse.text;
+                if (typeof rawResponse.content === 'string') return rawResponse.content;
+                if (Array.isArray(rawResponse.choices) && rawResponse.choices.length > 0 && rawResponse.choices[0].message && typeof rawResponse.choices[0].message.content === 'string') {
+                     return rawResponse.choices[0].message.content; // OpenAI format
+                }
+                console.warn("AI response was an object without a known standard text property. Stringifying.", rawResponse);
+                return JSON.stringify(rawResponse); // Fallback
+            }
+            // Handle unexpected types
+            else {
+                console.error("Unexpected response type or null response from AI:", typeof rawResponse, rawResponse);
+                // Return an empty string or throw an error, depending on desired behavior
+                return ""; // Return empty string to avoid breaking parsing logic downstream
+                // throw new Error(`Received unexpected response type (${typeof rawResponse}) from AI model.`);
+            }
+        }
+
+
+        function parseAndDisplayResponse(responseString) {
+            if (typeof responseString !== 'string' || responseString.trim() === '') {
+                 console.error("Invalid or empty input: responseString must be a non-empty string.", responseString);
+                 displayErrorMessage("Internal error: Failed to process AI response (empty or invalid).");
+                 return; // Stop processing
+            }
+
+            const sections = {};
+            const lines = responseString.split('\n');
+            let currentSection = null;
+            let buffer = [];
+
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                // Regex: More robust, handles potential variations, captures section name
+                const headingMatch = trimmedLine.match(/^###\s+([\w\s\(\)-]+?)\s*:?\s*$/); // Added hyphen to allowed chars
+
+                if (headingMatch) {
+                    if (currentSection && buffer.length > 0) {
+                        sections[currentSection] = buffer;
+                    }
+                    currentSection = headingMatch[1].trim(); // Get the captured section name
+                    buffer = []; // Reset buffer
+                } else if (currentSection) { // Only add if inside a section
+                    // Preserve line breaks by pushing the original line (or trimmed if desired)
+                     buffer.push(line); // Push the original line to keep formatting for multi-line text
+                }
+            }
+            // Save the last section
+            if (currentSection && buffer.length > 0) {
+                sections[currentSection] = buffer;
+            }
+
+            console.log("Parsed Sections:", sections); // Debugging
+
+            // --- Update DOM ---
+            resetResultDisplay(); // Clear previous
+
+             // Scores - Robust Parsing
+             const parseScore = (sectionName) => {
+                const sectionLines = sections[sectionName];
+                if (!sectionLines || sectionLines.length === 0) return 0;
+                // Find the first line containing digits, even if preceded/followed by text
+                const lineWithScore = sectionLines.find(line => /\b\d+\b/.test(line)); // Use word boundary
+                return parseInt(lineWithScore?.match(/\d+/)?.[0] || '0', 10);
+            };
+
+            const gs = parseScore('Global Score');
+            const es = parseScore('Engagement Score');
+            const fs = parseScore('Friendliness Score');
+            const vs = parseScore('Virality Score');
+
+            globalScoreValue.textContent = gs || '--';
+            updateProgress(engagementScoreProgress, engagementScorePerc, es);
+            updateProgress(friendlinessScoreProgress, friendlinessScorePerc, fs);
+            updateProgress(viralityScoreProgress, viralityScorePerc, vs);
+
+            // Text Sections
+            updateTextSection(performanceOverviewDiv, 'Performance Overview', sections['Performance Overview']);
+
+            // List Sections
+            updateList(algoFeaturesUl, sections['Algorithm-Friendly Features']);
+            updateList(algoOpportunitiesUl, sections['Algorithm Optimization Opportunities']);
+            updateList(algoTipsUl, sections['Algorithm Optimization Tips']);
+            updateList(algoFactorsUl, sections['Key Algorithm Factors (General)']);
+
+            // Example Posts
+            updateExamplePosts(examplePostsContainer, sections['Example Optimized Posts']);
+        }
+
+        function updateProgress(progressBar, percElement, value) {
+            const clampedValue = Math.max(0, Math.min(100, value || 0));
+            progressBar.value = clampedValue;
+            percElement.textContent = `${clampedValue}%`;
+
+            let colorVar = 'var(--secondary-color)'; // Default green
+            if (clampedValue < 40) { colorVar = '#FFC107'; } // Yellow/Orange for low scores
+            else if (clampedValue < 70) { colorVar = '#03A9F4'; } // Light Blue for medium scores
+            else { colorVar = '#4CAF50'; } // Green for high scores
+
+            // Apply color using the custom property for broader compatibility
+            progressBar.style.setProperty('--progress-value-color', colorVar);
+             // Also set accent-color for standard browsers like Firefox
+            progressBar.style.accentColor = colorVar;
+        }
+
+         function updateTextSection(divElement, title, lines) {
+            const content = lines?.map(line => line).join('\n').trim() || `No ${title.toLowerCase()} provided or recognized.`;
+            const safeContent = content.replace(/</g, "<").replace(/>/g, ">").replace(/\n/g, '<br>');
+            divElement.innerHTML = `<h3>${title}</h3><p>${safeContent}</p>`;
+         }
+
+        function updateList(ulElement, items) {
+            ulElement.innerHTML = ''; // Clear previous items
+            let itemCount = 0;
+            if (items && items.length > 0) {
+                items.forEach(item => {
+                    const trimmedItem = item.trim();
+                    // Match lines starting with '- ', '* ', or digits followed by '.' or ')' - capture content after marker
+                    const match = trimmedItem.match(/^[-*]\s+(.*)|^(\d+[\.\)])\s+(.*)/);
+                    let textContent = '';
+
+                    if (match) {
+                        textContent = match[1] || match[3]; // Content is in group 1 or 3
+                    } else if (trimmedItem && !trimmedItem.startsWith('###') && trimmedItem.length > 1) {
+                        // Assume it's a list item if it's not a heading and has content
+                        textContent = trimmedItem;
+                    }
+
+                    if (textContent && textContent.trim()) { // Ensure content is not just whitespace
+                         const li = document.createElement('li');
+                         // Sanitize: escape HTML tags
+                         li.textContent = textContent.replace(/</g, "<").replace(/>/g, ">");
+                         ulElement.appendChild(li);
+                         itemCount++;
+                    }
+                });
+            }
+
+            if (itemCount === 0) { // Fallback if no items found
+                 ulElement.innerHTML = '<li>No specific items provided or recognized in this category.</li>';
+            }
+        }
+
+       function updateExamplePosts(container, postLines) {
+             container.innerHTML = ''; // Clear previous
+             if (!postLines || postLines.length === 0) {
+                 container.innerHTML = '<p>No example posts generated.</p>';
+                 return;
+             }
+
+             let currentPostContent = [];
+             let currentPostTitle = ""; // Store the full title line
+             let capturing = false;
+
+             postLines.forEach((line, index) => {
+                 // Match "Example N:" or "Example N [Type]:" more loosely at the start of the line
+                const exampleMatch = line.trim().match(/^Example\s+(\d+)\s*[:]?\s*(?:\[(.*?)\])?\s*$/i);
+
+                 if (exampleMatch) {
+                     // Render previous post if capturing
+                     if (capturing && currentPostContent.length > 0) {
+                         renderExamplePost(container, currentPostTitle, currentPostContent.join('\n').trim());
+                     }
+                     // Start new post
+                     capturing = true;
+                     currentPostTitle = line.trim(); // Use the whole matched line as title
+                     currentPostContent = []; // Reset content buffer
+                 } else if (capturing) {
+                     // Add subsequent lines to the current post's content buffer
+                     currentPostContent.push(line);
+                 }
+             });
+
+             // Render the last captured post
+             if (capturing && currentPostContent.length > 0) {
+                 renderExamplePost(container, currentPostTitle, currentPostContent.join('\n').trim());
+             }
+
+             // Fallback if parsing failed
+             if (container.children.length === 0) {
+                 console.warn("Could not parse example posts. Raw lines:", postLines);
+                 container.innerHTML = '<p>Could not parse example posts from the response format. Raw response might be in console.</p>';
+             }
+         }
+
+
+         function renderExamplePost(container, title, content) {
+            if (!content || !title) return; // Don't render empty posts
+
+             const postDiv = document.createElement('div');
+             postDiv.className = 'post-card';
+
+             // Sanitize title and content
+             const safeTitle = title.replace(/</g, "<").replace(/>/g, ">");
+             const safeContent = content.replace(/</g, "<").replace(/>/g, ">").replace(/\n/g, '<br>'); // Convert newlines after escaping
+
+             postDiv.innerHTML = `
+                 <div class="author">${safeTitle}</div>
+                 <div class="content">${safeContent}</div>
+                 <div class="stats">✨ AI Optimized Example</div>
+             `;
+             container.appendChild(postDiv);
+         }
+
+        function showLoading(isLoading) {
+            loadingDiv.style.display = isLoading ? 'flex' : 'none';
+            analyzeButton.disabled = isLoading;
+        }
+
+        function showResponseAreas(isVisible, skipError = false) {
+            responseAreas.forEach(area => {
+                // Special handling for error container
+                if (area.id === 'error-message-container') {
+                    if (!skipError) { // Only hide error if explicitly told (e.g., on success)
+                         area.classList.remove('visible');
+                         area.style.display = 'none';
+                    }
+                    return; // Continue to next area
+                }
+
+                // Handle regular response areas
+                area.classList.toggle('visible', isVisible);
+                 if (isVisible) {
+                     area.style.display = area.classList.contains('score-section') ? 'flex' : 'block';
+                 } else {
+                     area.style.display = 'none';
+                 }
+            });
+        }
+
+         function displayErrorMessage(message) {
+             errorMessageContainer.innerHTML = ''; // Clear previous
+             const safeMessage = message.replace(/</g, "<").replace(/>/g, ">");
+             const errorPopup = document.createElement('div');
+             errorPopup.className = 'error-message-popup';
+             errorPopup.innerHTML = `
+                <h2>Analysis Failed</h2>
+                <p>${safeMessage}</p>
+            `;
+             errorMessageContainer.appendChild(errorPopup);
+             // Ensure error area is visible
+             errorMessageContainer.classList.add('visible');
+             errorMessageContainer.style.display = 'block';
+         }
+
+         function clearPreviousResults() {
+            // Hide all response areas including error
+             showResponseAreas(false, false); // false = hide, false = don't skip error area
+             errorMessageContainer.innerHTML = ''; // Explicitly clear error message content
+
+            // Reset results displays to placeholders
+             resetResultDisplay();
+         }
+
+         function resetResultDisplay() {
+              globalScoreValue.textContent = '--';
+              updateProgress(engagementScoreProgress, engagementScorePerc, 0);
+              updateProgress(friendlinessScoreProgress, friendlinessScorePerc, 0);
+              updateProgress(viralityScoreProgress, viralityScorePerc, 0);
+
+              performanceOverviewDiv.innerHTML = `<h3>Performance Overview</h3><p>Pending analysis...</p>`;
+              algoFeaturesUl.innerHTML = '<li>Pending analysis...</li>';
+              algoOpportunitiesUl.innerHTML = '<li>Pending analysis...</li>';
+              algoTipsUl.innerHTML = '<li>Pending analysis...</li>';
+              algoFactorsUl.innerHTML = '<li>Pending analysis...</li>';
+              examplePostsContainer.innerHTML = '<p>Examples will appear here...</p>';
+
+              // Explicitly reset progress bar colors via custom property
+              const defaultColor = 'var(--secondary-color)'; // Match initial CSS
+              engagementScoreProgress.style.setProperty('--progress-value-color', defaultColor);
+              friendlinessScoreProgress.style.setProperty('--progress-value-color', defaultColor);
+              viralityScoreProgress.style.setProperty('--progress-value-color', defaultColor);
+              engagementScoreProgress.style.accentColor = defaultColor; // For Firefox
+              friendlinessScoreProgress.style.accentColor = defaultColor;
+              viralityScoreProgress.style.accentColor = defaultColor;
+         }
+
+    </script>
+</body>
+</html>
